@@ -963,8 +963,23 @@ void CanvasItemEditor::_restore_canvas_item_state(List<CanvasItem *> p_canvas_it
 }
 
 void CanvasItemEditor::_commit_canvas_item_state(List<CanvasItem *> p_canvas_items, String action_name, bool commit_bones) {
-	undo_redo->create_action(action_name);
+	List<CanvasItem *> modified_canvas_items;
 	for (List<CanvasItem *>::Element *E = p_canvas_items.front(); E; E = E->next()) {
+		CanvasItem *canvas_item = E->get();
+		Dictionary old_state = editor_selection->get_node_editor_data<CanvasItemEditorSelectedItem>(canvas_item)->undo_state;
+		Dictionary new_state = canvas_item->_edit_get_state();
+
+		if (old_state.hash() != new_state.hash()) {
+			modified_canvas_items.push_back(canvas_item);
+		}
+	}
+
+	if (modified_canvas_items.is_empty()) {
+		return;
+	}
+
+	undo_redo->create_action(action_name);
+	for (List<CanvasItem *>::Element *E = modified_canvas_items.front(); E; E = E->next()) {
 		CanvasItem *canvas_item = E->get();
 		CanvasItemEditorSelectedItem *se = editor_selection->get_node_editor_data<CanvasItemEditorSelectedItem>(canvas_item);
 		undo_redo->add_do_method(canvas_item, "_edit_set_state", canvas_item->_edit_get_state());
@@ -3134,16 +3149,16 @@ void CanvasItemEditor::_draw_ruler_tool() {
 
 			float arc_1_start_angle =
 					end_to_begin.x < 0 ?
-							(end_to_begin.y < 0 ? 3.0 * Math_PI / 2.0 - vertical_angle_rad : Math_PI / 2.0) :
-							(end_to_begin.y < 0 ? 3.0 * Math_PI / 2.0 : Math_PI / 2.0 - vertical_angle_rad);
+							  (end_to_begin.y < 0 ? 3.0 * Math_PI / 2.0 - vertical_angle_rad : Math_PI / 2.0) :
+							  (end_to_begin.y < 0 ? 3.0 * Math_PI / 2.0 : Math_PI / 2.0 - vertical_angle_rad);
 			float arc_1_end_angle = arc_1_start_angle + vertical_angle_rad;
 			// Constrain arc to triangle height & max size
 			float arc_1_radius = MIN(MIN(arc_radius_max_length_percent * ruler_length, ABS(end_to_begin.y)), arc_max_radius);
 
 			float arc_2_start_angle =
 					end_to_begin.x < 0 ?
-							(end_to_begin.y < 0 ? 0.0 : -horizontal_angle_rad) :
-							(end_to_begin.y < 0 ? Math_PI - horizontal_angle_rad : Math_PI);
+							  (end_to_begin.y < 0 ? 0.0 : -horizontal_angle_rad) :
+							  (end_to_begin.y < 0 ? Math_PI - horizontal_angle_rad : Math_PI);
 			float arc_2_end_angle = arc_2_start_angle + horizontal_angle_rad;
 			// Constrain arc to triangle width & max size
 			float arc_2_radius = MIN(MIN(arc_radius_max_length_percent * ruler_length, ABS(end_to_begin.x)), arc_max_radius);
@@ -4148,7 +4163,7 @@ void CanvasItemEditor::_notification(int p_what) {
 		// the icon will be dark, so we need to lighten it before blending it
 		// with the red color.
 		const Color key_auto_color = EditorSettings::get_singleton()->is_dark_theme() ? Color(1, 1, 1) : Color(4.25, 4.25, 4.25);
-		key_auto_insert_button->add_theme_color_override("icon_color_pressed", key_auto_color.lerp(Color(1, 0, 0), 0.55));
+		key_auto_insert_button->add_theme_color_override("icon_pressed_color", key_auto_color.lerp(Color(1, 0, 0), 0.55));
 		animation_menu->set_icon(get_theme_icon("GuiTabMenuHl", "EditorIcons"));
 
 		zoom_minus->set_icon(get_theme_icon("ZoomLess", "EditorIcons"));
@@ -5764,7 +5779,7 @@ CanvasItemEditor::CanvasItemEditor(EditorNode *p_editor) {
 	zoom_reset->set_flat(true);
 	zoom_hb->add_child(zoom_reset);
 	zoom_reset->add_theme_constant_override("outline_size", 1);
-	zoom_reset->add_theme_color_override("font_outline_modulate", Color(0, 0, 0));
+	zoom_reset->add_theme_color_override("font_outline_color", Color(0, 0, 0));
 	zoom_reset->add_theme_color_override("font_color", Color(1, 1, 1));
 	zoom_reset->connect("pressed", callable_mp(this, &CanvasItemEditor::_button_zoom_reset));
 	zoom_reset->set_shortcut(ED_SHORTCUT("canvas_item_editor/zoom_reset", TTR("Zoom Reset"), KEY_MASK_CMD | KEY_0));
@@ -6598,7 +6613,7 @@ CanvasItemEditorViewport::CanvasItemEditorViewport(EditorNode *p_node, CanvasIte
 	}
 
 	label = memnew(Label);
-	label->add_theme_color_override("font_color_shadow", Color(0, 0, 0, 1));
+	label->add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1));
 	label->add_theme_constant_override("shadow_as_outline", 1 * EDSCALE);
 	label->hide();
 	canvas_item_editor->get_controls_container()->add_child(label);
@@ -6606,7 +6621,7 @@ CanvasItemEditorViewport::CanvasItemEditorViewport(EditorNode *p_node, CanvasIte
 	label_desc = memnew(Label);
 	label_desc->set_text(TTR("Drag & drop + Shift : Add node as sibling\nDrag & drop + Alt : Change node type"));
 	label_desc->add_theme_color_override("font_color", Color(0.6f, 0.6f, 0.6f, 1));
-	label_desc->add_theme_color_override("font_color_shadow", Color(0.2f, 0.2f, 0.2f, 1));
+	label_desc->add_theme_color_override("font_shadow_color", Color(0.2f, 0.2f, 0.2f, 1));
 	label_desc->add_theme_constant_override("shadow_as_outline", 1 * EDSCALE);
 	label_desc->add_theme_constant_override("line_spacing", 0);
 	label_desc->hide();

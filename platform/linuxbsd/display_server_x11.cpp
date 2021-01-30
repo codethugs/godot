@@ -191,7 +191,7 @@ void DisplayServerX11::alert(const String &p_alert, const String &p_title) {
 	}
 
 	if (program.length()) {
-		OS::get_singleton()->execute(program, args, true);
+		OS::get_singleton()->execute(program, args);
 	} else {
 		print_line(p_alert);
 	}
@@ -3360,7 +3360,7 @@ void DisplayServerX11::process_events() {
 
 					Vector<String> files = String((char *)p.data).split("\n", false);
 					for (int i = 0; i < files.size(); i++) {
-						files.write[i] = files[i].replace("file://", "").http_unescape().strip_edges();
+						files.write[i] = files[i].replace("file://", "").uri_decode().strip_edges();
 					}
 
 					if (!windows[window_id].drop_files_callback.is_null()) {

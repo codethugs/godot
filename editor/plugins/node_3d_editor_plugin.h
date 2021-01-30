@@ -213,6 +213,11 @@ class Node3DEditorViewport : public Control {
 		VIEW_DISPLAY_DEBUG_SDFGI_PROBES,
 		VIEW_DISPLAY_DEBUG_GI_BUFFER,
 		VIEW_DISPLAY_DEBUG_DISABLE_LOD,
+		VIEW_DISPLAY_DEBUG_CLUSTER_OMNI_LIGHTS,
+		VIEW_DISPLAY_DEBUG_CLUSTER_SPOT_LIGHTS,
+		VIEW_DISPLAY_DEBUG_CLUSTER_DECALS,
+		VIEW_DISPLAY_DEBUG_CLUSTER_REFLECTION_PROBES,
+
 		VIEW_LOCK_ROTATION,
 		VIEW_CINEMATIC_PREVIEW,
 		VIEW_AUTO_ORTHOGONAL,
@@ -483,6 +488,7 @@ public:
 	Camera3D *get_camera() { return camera; } // return the default camera object.
 
 	Node3DEditorViewport(Node3DEditor *p_spatial_editor, EditorNode *p_editor, int p_index);
+	~Node3DEditorViewport();
 };
 
 class Node3DEditorSelectedItem : public Object {

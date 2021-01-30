@@ -34,7 +34,7 @@
 #include "scene/resources/mesh.h"
 #include "scene/resources/surface_tool.h"
 
-#include "thirdparty/misc/triangulator.h"
+#include "thirdparty/misc/polypartition.h"
 
 template <class T>
 T collect_first(const Vector<VertexData<T>> *p_data, T p_fall_back) {
@@ -134,26 +134,6 @@ EditorSceneImporterMeshNode3D *FBXMeshData::create_fbx_mesh(const ImportState &s
 			mesh_geometry->get_normals(),
 			&collect_all,
 			HashMap<int, Vector3>());
-
-	//	List<int> keys;
-	//	normals.get_key_list(&keys);
-	//
-	//	const std::vector<Assimp::FBX::MeshGeometry::Edge>& edges = mesh_geometry->get_edge_map();
-	//	for (int index = 0; index < keys.size(); index++) {
-	//		const int key = keys[index];
-	//		const int v1 = edges[key].vertex_0;
-	//		const int v2 = edges[key].vertex_1;
-	//		const Vector3& n1 = normals.get(v1);
-	//		const Vector3& n2 = normals.get(v2);
-	//		print_verbose("[" + itos(v1) + "] n1: " + n1 + "\n[" + itos(v2) + "] n2: " + n2);
-	//		//print_verbose("[" + itos(key) + "] n1: " + n1 + ", n2: " + n2) ;
-	//		//print_verbose("vindex: " + itos(edges[key].vertex_0) + ", vindex2: " + itos(edges[key].vertex_1));
-	//		//Vector3 ver1 = vertices[edges[key].vertex_0];
-	//		//Vector3 ver2 = vertices[edges[key].vertex_1];
-	//		/*real_t angle1 = Math::rad2deg(n1.angle_to(n2));
-	//		real_t angle2 = Math::rad2deg(n2.angle_to(n1));
-	//		print_verbose("angle of normals: " + rtos(angle1) + " angle 2" + rtos(angle2));*/
-	//	}
 
 	HashMap<int, Vector2> uvs_0;
 	HashMap<int, HashMap<int, Vector2>> uvs_0_raw = extract_per_vertex_data(
@@ -371,6 +351,9 @@ EditorSceneImporterMeshNode3D *FBXMeshData::create_fbx_mesh(const ImportState &s
 						normals_ptr[vertex]);
 			}
 
+			if (state.is_blender_fbx) {
+				morph_st->generate_normals();
+			}
 			morph_st->generate_tangents();
 			surface->morphs.push_back(morph_st->commit_to_arrays());
 		}
@@ -393,6 +376,9 @@ EditorSceneImporterMeshNode3D *FBXMeshData::create_fbx_mesh(const ImportState &s
 	for (const SurfaceId *surface_id = surfaces.next(nullptr); surface_id != nullptr; surface_id = surfaces.next(surface_id)) {
 		SurfaceData *surface = surfaces.getptr(*surface_id);
 
+		if (state.is_blender_fbx) {
+			surface->surface_tool->generate_normals();
+		}
 		// you can't generate them without a valid uv map.
 		if (uvs_0_raw.size() > 0) {
 			surface->surface_tool->generate_tangents();
@@ -785,7 +771,7 @@ void FBXMeshData::add_vertex(
 		const Vector3 &p_morph_normal) {
 	ERR_FAIL_INDEX_MSG(p_vertex, (Vertex)p_vertices_position.size(), "FBX file is corrupted, the position of the vertex can't be retrieved.");
 
-	if (p_normals.has(p_vertex)) {
+	if (p_normals.has(p_vertex) && !state.is_blender_fbx) {
 		p_surface_tool->set_normal(p_normals[p_vertex] + p_morph_normal);
 	}
 
@@ -944,30 +930,30 @@ void FBXMeshData::triangulate_polygon(Ref<SurfaceTool> st, Vector<int> p_polygon
 			}
 		}
 
-		TriangulatorPoly triangulator_poly;
-		triangulator_poly.Init(polygon_vertex_count);
+		TPPLPoly tppl_poly;
+		tppl_poly.Init(polygon_vertex_count);
 		std::vector<Vector2> projected_vertices(polygon_vertex_count);
 		for (int i = 0; i < polygon_vertex_count; i += 1) {
 			const Vector2 pv(poly_vertices[i][axis_1_coord], poly_vertices[i][axis_2_coord]);
 			projected_vertices[i] = pv;
-			triangulator_poly.GetPoint(i) = pv;
+			tppl_poly.GetPoint(i) = pv;
 		}
-		triangulator_poly.SetOrientation(TRIANGULATOR_CCW);
+		tppl_poly.SetOrientation(TPPL_ORIENTATION_CCW);
 
-		List<TriangulatorPoly> out_poly;
+		List<TPPLPoly> out_poly;
 
-		TriangulatorPartition triangulator_partition;
-		if (triangulator_partition.Triangulate_OPT(&triangulator_poly, &out_poly) == 0) { // Good result.
-			if (triangulator_partition.Triangulate_EC(&triangulator_poly, &out_poly) == 0) { // Medium result.
-				if (triangulator_partition.Triangulate_MONO(&triangulator_poly, &out_poly) == 0) { // Really poor result.
+		TPPLPartition tppl_partition;
+		if (tppl_partition.Triangulate_OPT(&tppl_poly, &out_poly) == 0) { // Good result.
+			if (tppl_partition.Triangulate_EC(&tppl_poly, &out_poly) == 0) { // Medium result.
+				if (tppl_partition.Triangulate_MONO(&tppl_poly, &out_poly) == 0) { // Really poor result.
 					ERR_FAIL_MSG("The triangulation of this polygon failed, please try to triangulate your mesh or check if it has broken polygons.");
 				}
 			}
 		}
 
 		std::vector<Vector2> tris(out_poly.size());
-		for (List<TriangulatorPoly>::Element *I = out_poly.front(); I; I = I->next()) {
-			TriangulatorPoly &tp = I->get();
+		for (List<TPPLPoly>::Element *I = out_poly.front(); I; I = I->next()) {
+			TPPLPoly &tp = I->get();
 
 			ERR_FAIL_COND_MSG(tp.GetNumPoints() != 3, "The triangulator retuned more points, how this is possible?");
 			// Find Index

@@ -140,6 +140,12 @@ void EditorSceneImporterMesh::generate_lods() {
 	if (!SurfaceTool::simplify_func) {
 		return;
 	}
+	if (!SurfaceTool::simplify_scale_func) {
+		return;
+	}
+	if (!SurfaceTool::simplify_sloppy_func) {
+		return;
+	}
 
 	for (int i = 0; i < surfaces.size(); i++) {
 		if (surfaces[i].primitive != Mesh::PRIMITIVE_TRIANGLES) {
@@ -157,20 +163,52 @@ void EditorSceneImporterMesh::generate_lods() {
 
 		int min_indices = 10;
 		int index_target = indices.size() / 2;
-		print_line("total: " + itos(indices.size()));
+		print_line("Total indices: " + itos(indices.size()));
+		float mesh_scale = SurfaceTool::simplify_scale_func((const float *)vertices_ptr, vertex_count, sizeof(Vector3));
+		const float target_error = 1e-3f;
+		float abs_target_error = target_error / mesh_scale;
 		while (index_target > min_indices) {
 			float error;
 			Vector<int> new_indices;
 			new_indices.resize(indices.size());
-			size_t new_len = SurfaceTool::simplify_func((unsigned int *)new_indices.ptrw(), (const unsigned int *)indices.ptr(), indices.size(), (const float *)vertices_ptr, vertex_count, sizeof(Vector3), index_target, 1e20, &error);
-			print_line("shoot for " + itos(index_target) + ", got " + itos(new_len) + " distance " + rtos(error));
+			size_t new_len = SurfaceTool::simplify_func((unsigned int *)new_indices.ptrw(), (const unsigned int *)indices.ptr(), indices.size(), (const float *)vertices_ptr, vertex_count, sizeof(Vector3), index_target, abs_target_error, &error);
 			if ((int)new_len > (index_target * 120 / 100)) {
+				// Attribute discontinuities break normals.
+				bool is_sloppy = false;
+				if (is_sloppy) {
+					abs_target_error = target_error / mesh_scale;
+					index_target = new_len;
+					while (index_target > min_indices) {
+						Vector<int> sloppy_new_indices;
+						sloppy_new_indices.resize(indices.size());
+						new_len = SurfaceTool::simplify_sloppy_func((unsigned int *)sloppy_new_indices.ptrw(), (const unsigned int *)indices.ptr(), indices.size(), (const float *)vertices_ptr, vertex_count, sizeof(Vector3), index_target, abs_target_error, &error);
+						if ((int)new_len > (index_target * 120 / 100)) {
+							break; // 20 percent tolerance
+						}
+						sloppy_new_indices.resize(new_len);
+						Surface::LOD lod;
+						lod.distance = error * mesh_scale;
+						abs_target_error = lod.distance;
+						if (Math::is_equal_approx(abs_target_error, 0.0f)) {
+							return;
+						}
+						lod.indices = sloppy_new_indices;
+						print_line("Lod " + itos(surfaces.write[i].lods.size()) + " shoot for " + itos(index_target / 3) + " triangles, got " + itos(new_len / 3) + " triangles. Distance " + rtos(lod.distance) + ". Use simplify sloppy.");
+						surfaces.write[i].lods.push_back(lod);
+						index_target /= 2;
+					}
+				}
 				break; // 20 percent tolerance
 			}
 			new_indices.resize(new_len);
 			Surface::LOD lod;
-			lod.distance = error;
+			lod.distance = error * mesh_scale;
+			abs_target_error = lod.distance;
+			if (Math::is_equal_approx(abs_target_error, 0.0f)) {
+				return;
+			}
 			lod.indices = new_indices;
+			print_line("Lod " + itos(surfaces.write[i].lods.size()) + " shoot for " + itos(index_target / 3) + " triangles, got " + itos(new_len / 3) + " triangles. Distance " + rtos(lod.distance));
 			surfaces.write[i].lods.push_back(lod);
 			index_target /= 2;
 		}
@@ -212,6 +250,11 @@ Ref<ArrayMesh> EditorSceneImporterMesh::get_mesh() {
 				mesh->surface_set_name(mesh->get_surface_count() - 1, surfaces[i].name);
 			}
 		}
+
+		if (shadow_mesh.is_valid()) {
+			Ref<ArrayMesh> shadow = shadow_mesh->get_mesh();
+			mesh->set_shadow_mesh(shadow);
+		}
 	}
 
 	return mesh;
@@ -221,6 +264,103 @@ void EditorSceneImporterMesh::clear() {
 	surfaces.clear();
 	blend_shapes.clear();
 	mesh.unref();
+}
+
+void EditorSceneImporterMesh::create_shadow_mesh() {
+	if (shadow_mesh.is_valid()) {
+		shadow_mesh.unref();
+	}
+
+	//no shadow mesh for blendshapes
+	if (blend_shapes.size() > 0) {
+		return;
+	}
+	//no shadow mesh for skeletons
+	for (int i = 0; i < surfaces.size(); i++) {
+		if (surfaces[i].arrays[RS::ARRAY_BONES].get_type() != Variant::NIL) {
+			return;
+		}
+		if (surfaces[i].arrays[RS::ARRAY_WEIGHTS].get_type() != Variant::NIL) {
+			return;
+		}
+	}
+
+	shadow_mesh.instance();
+
+	for (int i = 0; i < surfaces.size(); i++) {
+		LocalVector<int> vertex_remap;
+		Vector<Vector3> new_vertices;
+		Vector<Vector3> vertices = surfaces[i].arrays[RS::ARRAY_VERTEX];
+		int vertex_count = vertices.size();
+		{
+			Map<Vector3, int> unique_vertices;
+			const Vector3 *vptr = vertices.ptr();
+			for (int j = 0; j < vertex_count; j++) {
+				Vector3 v = vptr[j];
+
+				Map<Vector3, int>::Element *E = unique_vertices.find(v);
+
+				if (E) {
+					vertex_remap.push_back(E->get());
+				} else {
+					int vcount = unique_vertices.size();
+					unique_vertices[v] = vcount;
+					vertex_remap.push_back(vcount);
+					new_vertices.push_back(v);
+				}
+			}
+		}
+
+		Array new_surface;
+		new_surface.resize(RS::ARRAY_MAX);
+		Dictionary lods;
+
+		//		print_line("original vertex count: " + itos(vertices.size()) + " new vertex count: " + itos(new_vertices.size()));
+
+		new_surface[RS::ARRAY_VERTEX] = new_vertices;
+
+		Vector<int> indices = surfaces[i].arrays[RS::ARRAY_INDEX];
+		if (indices.size()) {
+			int index_count = indices.size();
+			const int *index_rptr = indices.ptr();
+			Vector<int> new_indices;
+			new_indices.resize(indices.size());
+			int *index_wptr = new_indices.ptrw();
+
+			for (int j = 0; j < index_count; j++) {
+				int index = index_rptr[j];
+				ERR_FAIL_INDEX(index, vertex_count);
+				index_wptr[j] = vertex_remap[index];
+			}
+
+			new_surface[RS::ARRAY_INDEX] = new_indices;
+
+			// Make sure the same LODs as the full version are used.
+			// This makes it more coherent between rendered model and its shadows.
+			for (int j = 0; j < surfaces[i].lods.size(); j++) {
+				indices = surfaces[i].lods[j].indices;
+
+				index_count = indices.size();
+				index_rptr = indices.ptr();
+				new_indices.resize(indices.size());
+				index_wptr = new_indices.ptrw();
+
+				for (int k = 0; k < index_count; k++) {
+					int index = index_rptr[j];
+					ERR_FAIL_INDEX(index, vertex_count);
+					index_wptr[j] = vertex_remap[index];
+				}
+
+				lods[surfaces[i].lods[j].distance] = new_indices;
+			}
+		}
+
+		shadow_mesh->add_surface(surfaces[i].primitive, new_surface, Array(), lods, Ref<Material>(), surfaces[i].name);
+	}
+}
+
+Ref<EditorSceneImporterMesh> EditorSceneImporterMesh::get_shadow_mesh() const {
+	return shadow_mesh;
 }
 
 void EditorSceneImporterMesh::_set_data(const Dictionary &p_data) {

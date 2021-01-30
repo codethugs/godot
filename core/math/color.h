@@ -78,14 +78,14 @@ struct Color {
 	void operator-=(const Color &p_color);
 
 	Color operator*(const Color &p_color) const;
-	Color operator*(real_t p_rvalue) const;
+	Color operator*(float p_scalar) const;
 	void operator*=(const Color &p_color);
-	void operator*=(real_t p_rvalue);
+	void operator*=(float p_scalar);
 
 	Color operator/(const Color &p_color) const;
-	Color operator/(real_t p_rvalue) const;
+	Color operator/(float p_scalar) const;
 	void operator/=(const Color &p_color);
-	void operator/=(real_t p_rvalue);
+	void operator/=(float p_scalar);
 
 	bool is_equal_approx(const Color &p_color) const;
 
@@ -182,9 +182,12 @@ struct Color {
 	static Color html(const String &p_rgba);
 	static bool html_is_valid(const String &p_color);
 	static Color named(const String &p_name);
+	static Color named(const String &p_name, const Color &p_default);
+	static int find_named_color(const String &p_name);
 	static int get_named_color_count();
 	static String get_named_color_name(int p_idx);
 	static Color get_named_color(int p_idx);
+	static Color from_string(const String &p_string, const Color &p_default);
 	String to_html(bool p_alpha = true) const;
 	Color from_hsv(float p_h, float p_s, float p_v, float p_a) const;
 	static Color from_rgbe9995(uint32_t p_rgbe);
@@ -256,8 +259,8 @@ bool Color::operator<(const Color &p_color) const {
 	}
 }
 
-_FORCE_INLINE_ Color operator*(real_t p_real, const Color &p_color) {
-	return p_color * p_real;
+_FORCE_INLINE_ Color operator*(float p_scalar, const Color &p_color) {
+	return p_color * p_scalar;
 }
 
 #endif // COLOR_H

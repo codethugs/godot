@@ -274,11 +274,11 @@ bool PhysicsDirectSpaceState3DSW::cast_motion(const RID &p_shape, const Transfor
 			continue;
 		}
 
-		//test initial overlap
+		//test initial overlap, ignore objects it's inside of.
 		sep_axis = p_motion.normalized();
 
 		if (!CollisionSolver3DSW::solve_distance(shape, p_xform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, aabb, &sep_axis)) {
-			return false;
+			continue;
 		}
 
 		//just do kinematic solving
@@ -476,7 +476,7 @@ Vector3 PhysicsDirectSpaceState3DSW::get_closest_point_to_object_volume(RID p_ob
 
 	ERR_FAIL_COND_V(obj->get_space() != space, Vector3());
 
-	float min_distance = 1e20;
+	real_t min_distance = 1e20;
 	Vector3 min_point;
 
 	bool shapes_found = false;
@@ -492,7 +492,7 @@ Vector3 PhysicsDirectSpaceState3DSW::get_closest_point_to_object_volume(RID p_ob
 		Vector3 point = shape->get_closest_point_to(shape_xform.affine_inverse().xform(p_point));
 		point = shape_xform.xform(point);
 
-		float dist = point.distance_to(p_point);
+		real_t dist = point.distance_to(p_point);
 		if (dist < min_distance) {
 			min_distance = dist;
 			min_point = point;
@@ -649,9 +649,9 @@ int Space3DSW::test_body_ray_separation(Body3DSW *p_body, const Transform &p_tra
 								Vector3 a = sr[k * 2 + 0];
 								Vector3 b = sr[k * 2 + 1];
 
-								recover_motion += (b - a) * 0.4;
+								recover_motion += (b - a) / cbk.amount;
 
-								float depth = a.distance_to(b);
+								real_t depth = a.distance_to(b);
 								if (depth > result.collision_depth) {
 									result.collision_depth = depth;
 									result.collision_point = b;
@@ -791,7 +791,7 @@ bool Space3DSW::test_body_motion(Body3DSW *p_body, const Transform &p_from, cons
 			for (int i = 0; i < cbk.amount; i++) {
 				Vector3 a = sr[i * 2 + 0];
 				Vector3 b = sr[i * 2 + 1];
-				recover_motion += (b - a) * 0.4;
+				recover_motion += (b - a) / cbk.amount;
 			}
 
 			if (recover_motion == Vector3()) {

@@ -643,7 +643,7 @@ ShaderLanguage::Token ShaderLanguage::_get_token() {
 					}
 
 					if (hexa_found) {
-						tk.constant = (double)str.hex_to_int(true);
+						tk.constant = (double)str.hex_to_int();
 					} else {
 						tk.constant = str.to_float();
 					}
@@ -6305,7 +6305,9 @@ Error ShaderLanguage::_parse_shader(const Map<StringName, FunctionInfo> &p_funct
 						}
 
 						uniform2.texture_order = -1;
-						uniform2.order = uniforms++;
+						if (uniform_scope != ShaderNode::Uniform::SCOPE_INSTANCE) {
+							uniform2.order = uniforms++;
+						}
 					}
 					uniform2.type = type;
 					uniform2.scope = uniform_scope;

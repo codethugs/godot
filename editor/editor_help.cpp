@@ -1331,11 +1331,11 @@ static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt) {
 	Ref<Font> doc_code_font = p_rt->get_theme_font("doc_source", "EditorFonts");
 	Ref<Font> doc_kbd_font = p_rt->get_theme_font("doc_keyboard", "EditorFonts");
 
-	Color font_color_hl = p_rt->get_theme_color("headline_color", "EditorHelp");
+	Color headline_color = p_rt->get_theme_color("headline_color", "EditorHelp");
 	Color accent_color = p_rt->get_theme_color("accent_color", "Editor");
 	Color property_color = p_rt->get_theme_color("property_color", "Editor");
-	Color link_color = accent_color.lerp(font_color_hl, 0.8);
-	Color code_color = accent_color.lerp(font_color_hl, 0.6);
+	Color link_color = accent_color.lerp(headline_color, 0.8);
+	Color code_color = accent_color.lerp(headline_color, 0.6);
 	Color kbd_color = accent_color.lerp(property_color, 0.6);
 
 	String bbcode = p_bbcode.dedent().replace("\t", "").replace("\r", "").strip_edges();
@@ -1481,7 +1481,7 @@ static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt) {
 			tag_stack.push_front(tag);
 		} else if (tag == "i") {
 			//use italics font
-			p_rt->push_color(font_color_hl);
+			p_rt->push_color(headline_color);
 			pos = brk_end + 1;
 			tag_stack.push_front(tag);
 		} else if (tag == "code" || tag == "codeblock") {
@@ -1549,46 +1549,7 @@ static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt) {
 			tag_stack.push_front(tag);
 		} else if (tag.begins_with("color=")) {
 			String col = tag.substr(6, tag.length());
-			Color color;
-
-			if (col.begins_with("#")) {
-				color = Color::html(col);
-			} else if (col == "aqua") {
-				color = Color(0, 1, 1);
-			} else if (col == "black") {
-				color = Color(0, 0, 0);
-			} else if (col == "blue") {
-				color = Color(0, 0, 1);
-			} else if (col == "fuchsia") {
-				color = Color(1, 0, 1);
-			} else if (col == "gray" || col == "grey") {
-				color = Color(0.5, 0.5, 0.5);
-			} else if (col == "green") {
-				color = Color(0, 0.5, 0);
-			} else if (col == "lime") {
-				color = Color(0, 1, 0);
-			} else if (col == "maroon") {
-				color = Color(0.5, 0, 0);
-			} else if (col == "navy") {
-				color = Color(0, 0, 0.5);
-			} else if (col == "olive") {
-				color = Color(0.5, 0.5, 0);
-			} else if (col == "purple") {
-				color = Color(0.5, 0, 0.5);
-			} else if (col == "red") {
-				color = Color(1, 0, 0);
-			} else if (col == "silver") {
-				color = Color(0.75, 0.75, 0.75);
-			} else if (col == "teal") {
-				color = Color(0, 0.5, 0.5);
-			} else if (col == "white") {
-				color = Color(1, 1, 1);
-			} else if (col == "yellow") {
-				color = Color(1, 1, 0);
-			} else {
-				color = Color(0, 0, 0); //base_color;
-			}
-
+			Color color = Color::from_string(col, Color());
 			p_rt->push_color(color);
 			pos = brk_end + 1;
 			tag_stack.push_front("color");

@@ -337,6 +337,7 @@ private:
 	bool updating_scroll;
 	int current_idx = 1;
 	int current_char_ofs = 0;
+	int visible_paragraph_count;
 	int visible_line_count;
 
 	int tab_size;
@@ -393,7 +394,7 @@ private:
 
 	void _shape_line(ItemFrame *p_frame, int p_line, const Ref<Font> &p_base_font, int p_base_font_size, int p_width, int *r_char_offset);
 	void _resize_line(ItemFrame *p_frame, int p_line, const Ref<Font> &p_base_font, int p_base_font_size, int p_width);
-	void _draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_ofs, int p_width, const Color &p_base_color, int p_outline_size, const Color &p_outline_color, const Color &p_font_color_shadow, bool p_shadow_as_outline, const Point2 &shadow_ofs);
+	int _draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_ofs, int p_width, const Color &p_base_color, int p_outline_size, const Color &p_outline_color, const Color &p_font_shadow_color, bool p_shadow_as_outline, const Point2 &shadow_ofs);
 	float _find_click_in_line(ItemFrame *p_frame, int p_line, const Vector2 &p_ofs, int p_width, const Point2i &p_click, ItemFrame **r_click_frame = nullptr, int *r_click_line = nullptr, Item **r_click_item = nullptr, int *r_click_char = nullptr);
 
 	String _roman(int p_num, bool p_capitalize) const;
@@ -420,8 +421,6 @@ private:
 	bool _find_meta(Item *p_item, Variant *r_meta, ItemMeta **r_item = nullptr);
 	bool _find_layout_subitem(Item *from, Item *to);
 	void _fetch_item_fx_stack(Item *p_item, Vector<ItemFX *> &r_stack);
-
-	static Color _get_color_from_string(const String &p_color_str, const Color &p_default_color);
 
 	void _update_scroll();
 	void _update_fx(ItemFrame *p_frame, float p_delta_time);
@@ -508,6 +507,10 @@ public:
 	bool is_fit_content_height_enabled() const;
 
 	bool search(const String &p_string, bool p_from_selection = false, bool p_search_previous = false);
+
+	void scroll_to_paragraph(int p_paragraph);
+	int get_paragraph_count() const;
+	int get_visible_paragraph_count() const;
 
 	void scroll_to_line(int p_line);
 	int get_line_count() const;

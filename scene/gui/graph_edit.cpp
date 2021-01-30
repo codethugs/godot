@@ -154,6 +154,10 @@ Vector2 GraphEditMinimap::_convert_to_graph_position(const Vector2 &p_position) 
 }
 
 void GraphEditMinimap::_gui_input(const Ref<InputEvent> &p_ev) {
+	if (!ge->is_minimap_enabled()) {
+		return;
+	}
+
 	Ref<InputEventMouseButton> mb = p_ev;
 	Ref<InputEventMouseMotion> mm = p_ev;
 
@@ -401,7 +405,14 @@ void GraphEdit::add_child_notify(Node *p_child) {
 void GraphEdit::remove_child_notify(Node *p_child) {
 	Control::remove_child_notify(p_child);
 
-	if (is_inside_tree()) {
+	if (p_child == top_layer) {
+		top_layer = nullptr;
+		minimap = nullptr;
+	} else if (p_child == connections_layer) {
+		connections_layer = nullptr;
+	}
+
+	if (top_layer != nullptr && is_inside_tree()) {
 		top_layer->call_deferred("raise"); // Top layer always on top!
 	}
 
@@ -409,8 +420,14 @@ void GraphEdit::remove_child_notify(Node *p_child) {
 	if (gn) {
 		gn->disconnect("position_offset_changed", callable_mp(this, &GraphEdit::_graph_node_moved));
 		gn->disconnect("raise_request", callable_mp(this, &GraphEdit::_graph_node_raised));
-		gn->disconnect("item_rect_changed", callable_mp((CanvasItem *)connections_layer, &CanvasItem::update));
-		gn->disconnect("item_rect_changed", callable_mp((CanvasItem *)minimap, &GraphEditMinimap::update));
+
+		// In case of the whole GraphEdit being destroyed these references can already be freed.
+		if (connections_layer != nullptr && connections_layer->is_inside_tree()) {
+			gn->disconnect("item_rect_changed", callable_mp((CanvasItem *)connections_layer, &CanvasItem::update));
+		}
+		if (minimap != nullptr && minimap->is_inside_tree()) {
+			gn->disconnect("item_rect_changed", callable_mp((CanvasItem *)minimap, &GraphEditMinimap::update));
+		}
 	}
 }
 
@@ -1741,7 +1758,7 @@ GraphEdit::GraphEdit() {
 	top_layer->add_child(minimap);
 	minimap->set_name("_minimap");
 	minimap->set_modulate(Color(1, 1, 1, minimap_opacity));
-	minimap->set_mouse_filter(MOUSE_FILTER_STOP);
+	minimap->set_mouse_filter(MOUSE_FILTER_PASS);
 	minimap->set_custom_minimum_size(Vector2(50, 50));
 	minimap->set_size(minimap_size);
 	minimap->set_anchors_preset(Control::PRESET_BOTTOM_RIGHT);

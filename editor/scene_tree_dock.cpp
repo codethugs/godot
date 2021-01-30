@@ -57,10 +57,7 @@ void SceneTreeDock::_nodes_drag_begin() {
 }
 
 void SceneTreeDock::_quick_open() {
-	Vector<String> files = quick_open->get_selected_files();
-	for (int i = 0; i < files.size(); i++) {
-		instance(files[i]);
-	}
+	instance_scenes(quick_open->get_selected_files(), scene_tree->get_selected());
 }
 
 void SceneTreeDock::_input(Ref<InputEvent> p_event) {
@@ -123,24 +120,9 @@ void SceneTreeDock::_unhandled_key_input(Ref<InputEvent> p_event) {
 }
 
 void SceneTreeDock::instance(const String &p_file) {
-	Node *parent = scene_tree->get_selected();
-
-	if (!parent) {
-		parent = edited_scene;
-	};
-
-	if (!edited_scene) {
-		current_option = -1;
-		accept->set_text(TTR("No parent to instance a child at."));
-		accept->popup_centered();
-		return;
-	};
-
-	ERR_FAIL_COND(!parent);
-
 	Vector<String> scenes;
 	scenes.push_back(p_file);
-	_perform_instance_scenes(scenes, parent, -1);
+	instance_scenes(scenes, scene_tree->get_selected());
 }
 
 void SceneTreeDock::instance_scenes(const Vector<String> &p_files, Node *p_parent) {
@@ -151,7 +133,11 @@ void SceneTreeDock::instance_scenes(const Vector<String> &p_files, Node *p_paren
 	}
 
 	if (!parent || !edited_scene) {
-		accept->set_text(TTR("No parent to instance the scenes at."));
+		if (p_files.size() == 1) {
+			accept->set_text(TTR("No parent to instance a child at."));
+		} else {
+			accept->set_text(TTR("No parent to instance the scenes at."));
+		}
 		accept->popup_centered();
 		return;
 	};
@@ -228,6 +214,7 @@ void SceneTreeDock::_perform_instance_scenes(const Vector<String> &p_files, Node
 	}
 
 	editor_data->get_undo_redo().commit_action();
+	editor->push_item(instances[instances.size() - 1]);
 }
 
 void SceneTreeDock::_replace_with_branch_scene(const String &p_file, Node *base) {
@@ -1935,7 +1922,7 @@ void SceneTreeDock::_selection_changed() {
 }
 
 void SceneTreeDock::_do_create(Node *p_parent) {
-	Object *c = create_dialog->instance_selected();
+	Variant c = create_dialog->instance_selected();
 
 	ERR_FAIL_COND(!c);
 	Node *child = Object::cast_to<Node>(c);
@@ -2015,7 +2002,7 @@ void SceneTreeDock::_create() {
 			Node *n = E->get();
 			ERR_FAIL_COND(!n);
 
-			Object *c = create_dialog->instance_selected();
+			Variant c = create_dialog->instance_selected();
 
 			ERR_FAIL_COND(!c);
 			Node *newnode = Object::cast_to<Node>(c);
@@ -2153,7 +2140,6 @@ void SceneTreeDock::replace_node(Node *p_node, Node *p_by_node, bool p_keep_prop
 	if (n == edited_scene) {
 		edited_scene = newnode;
 		editor->set_edited_scene(newnode);
-		newnode->set_editable_instances(n->get_editable_instances());
 	}
 
 	//small hack to make collisionshapes and other kind of nodes to work

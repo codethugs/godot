@@ -149,24 +149,19 @@ void PhysicsServer2DSW::_shape_col_cbk(const Vector2 &p_point_A, const Vector2 &
 		return;
 	}
 
+	Vector2 rel_dir = (p_point_A - p_point_B);
+	real_t rel_length2 = rel_dir.length_squared();
 	if (cbk->valid_dir != Vector2()) {
-		if (p_point_A.distance_squared_to(p_point_B) > cbk->valid_depth * cbk->valid_depth) {
-			cbk->invalid_by_dir++;
-			return;
-		}
-		Vector2 rel_dir = (p_point_A - p_point_B).normalized();
-
-		if (cbk->valid_dir.dot(rel_dir) < Math_SQRT12) { //sqrt(2)/2.0 - 45 degrees
-			cbk->invalid_by_dir++;
-
-			/*
-			print_line("A: "+p_point_A);
-			print_line("B: "+p_point_B);
-			print_line("discard too angled "+rtos(cbk->valid_dir.dot((p_point_A-p_point_B))));
-			print_line("resnorm: "+(p_point_A-p_point_B).normalized());
-			print_line("distance: "+rtos(p_point_A.distance_to(p_point_B)));
-			*/
-			return;
+		if (cbk->valid_depth < 10e20) {
+			if (rel_length2 > cbk->valid_depth * cbk->valid_depth ||
+					(rel_length2 > CMP_EPSILON && cbk->valid_dir.dot(rel_dir.normalized()) < CMP_EPSILON)) {
+				cbk->invalid_by_dir++;
+				return;
+			}
+		} else {
+			if (rel_length2 > 0 && cbk->valid_dir.dot(rel_dir.normalized()) < CMP_EPSILON) {
+				return;
+			}
 		}
 	}
 
@@ -182,8 +177,7 @@ void PhysicsServer2DSW::_shape_col_cbk(const Vector2 &p_point_A, const Vector2 &
 			}
 		}
 
-		real_t d = p_point_A.distance_squared_to(p_point_B);
-		if (d < min_depth) {
+		if (rel_length2 < min_depth) {
 			return;
 		}
 		cbk->ptr[min_depth_idx * 2 + 0] = p_point_A;
@@ -673,7 +667,7 @@ void PhysicsServer2DSW::body_set_shape_disabled(RID p_body, int p_shape_idx, boo
 	body->set_shape_as_disabled(p_shape_idx, p_disabled);
 }
 
-void PhysicsServer2DSW::body_set_shape_as_one_way_collision(RID p_body, int p_shape_idx, bool p_enable, float p_margin) {
+void PhysicsServer2DSW::body_set_shape_as_one_way_collision(RID p_body, int p_shape_idx, bool p_enable, real_t p_margin) {
 	Body2DSW *body = body_owner.getornull(p_body);
 	ERR_FAIL_COND(!body);
 	ERR_FAIL_INDEX(p_shape_idx, body->get_shape_count());
@@ -964,7 +958,7 @@ bool PhysicsServer2DSW::body_test_motion(RID p_body, const Transform2D &p_from, 
 	return body->get_space()->test_body_motion(body, p_from, p_motion, p_infinite_inertia, p_margin, r_result, p_exclude_raycast_shapes);
 }
 
-int PhysicsServer2DSW::body_test_ray_separation(RID p_body, const Transform2D &p_transform, bool p_infinite_inertia, Vector2 &r_recover_motion, SeparationResult *r_results, int p_result_max, float p_margin) {
+int PhysicsServer2DSW::body_test_ray_separation(RID p_body, const Transform2D &p_transform, bool p_infinite_inertia, Vector2 &r_recover_motion, SeparationResult *r_results, int p_result_max, real_t p_margin) {
 	Body2DSW *body = body_owner.getornull(p_body);
 	ERR_FAIL_COND_V(!body, false);
 	ERR_FAIL_COND_V(!body->get_space(), false);

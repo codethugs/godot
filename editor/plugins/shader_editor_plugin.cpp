@@ -117,7 +117,7 @@ void ShaderTextEditor::_load_theme_settings() {
 	get_text_editor()->add_theme_color_override("line_number_color", line_number_color);
 	get_text_editor()->add_theme_color_override("caret_color", caret_color);
 	get_text_editor()->add_theme_color_override("caret_background_color", caret_background_color);
-	get_text_editor()->add_theme_color_override("font_color_selected", text_selected_color);
+	get_text_editor()->add_theme_color_override("font_selected_color", text_selected_color);
 	get_text_editor()->add_theme_color_override("selection_color", selection_color);
 	get_text_editor()->add_theme_color_override("brace_mismatch_color", brace_mismatch_color);
 	get_text_editor()->add_theme_color_override("current_line_color", current_line_color);
@@ -339,7 +339,7 @@ void ShaderEditor::_menu_option(int p_option) {
 			shader_editor->remove_all_bookmarks();
 		} break;
 		case HELP_DOCS: {
-			OS::get_singleton()->shell_open("https://docs.godotengine.org/en/stable/tutorials/shading/shading_reference/index.html");
+			OS::get_singleton()->shell_open("https://docs.godotengine.org/en/latest/tutorials/shaders/shader_reference/index.html");
 		} break;
 	}
 	if (p_option != SEARCH_FIND && p_option != SEARCH_REPLACE && p_option != SEARCH_GOTO_LINE) {

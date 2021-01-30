@@ -618,11 +618,11 @@ void RichTextLabel::_shape_line(ItemFrame *p_frame, int p_line, const Ref<Font> 
 	}
 }
 
-void RichTextLabel::_draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_ofs, int p_width, const Color &p_base_color, int p_outline_size, const Color &p_outline_color, const Color &p_font_color_shadow, bool p_shadow_as_outline, const Point2 &p_shadow_ofs) {
+int RichTextLabel::_draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_ofs, int p_width, const Color &p_base_color, int p_outline_size, const Color &p_outline_color, const Color &p_font_shadow_color, bool p_shadow_as_outline, const Point2 &p_shadow_ofs) {
 	Vector2 off;
 
-	ERR_FAIL_COND(p_frame == nullptr);
-	ERR_FAIL_COND(p_line < 0 || p_line >= p_frame->lines.size());
+	ERR_FAIL_COND_V(p_frame == nullptr, 0);
+	ERR_FAIL_COND_V(p_line < 0 || p_line >= p_frame->lines.size(), 0);
 
 	Line &l = p_frame->lines.write[p_line];
 
@@ -631,7 +631,7 @@ void RichTextLabel::_draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_
 	Variant meta;
 
 	if (it_from == nullptr) {
-		return;
+		return 0;
 	}
 
 	RID ci = get_canvas_item();
@@ -699,14 +699,24 @@ void RichTextLabel::_draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_
 	}
 	l.text_buf->draw_dropcap(ci, p_ofs + ((rtl) ? Vector2() : Vector2(l.offset.x, 0)), l.dc_color);
 
+	int line_count = 0;
+	Size2 ctrl_size = get_size();
 	// Draw text.
 	for (int line = 0; line < l.text_buf->get_line_count(); line++) {
 		RID rid = l.text_buf->get_line_rid(line);
+		if (p_ofs.y + off.y >= ctrl_size.height) {
+			break;
+		}
+		if (p_ofs.y + off.y + TS->shaped_text_get_size(rid).y <= 0) {
+			off.y += TS->shaped_text_get_size(rid).y;
+			continue;
+		}
 
 		float width = l.text_buf->get_width();
 		float length = TS->shaped_text_get_width(rid);
 
 		// Draw line.
+		line_count++;
 
 		if (rtl) {
 			off.x = p_width - l.offset.x - width;
@@ -790,7 +800,7 @@ void RichTextLabel::_draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_
 							}
 
 							for (int j = 0; j < frame->lines.size(); j++) {
-								_draw_line(frame, j, p_ofs + rect.position + off + Vector2(0, frame->lines[j].offset.y), rect.size.x, p_base_color, p_outline_size, p_outline_color, p_font_color_shadow, p_shadow_as_outline, p_shadow_ofs);
+								_draw_line(frame, j, p_ofs + rect.position + off + Vector2(0, frame->lines[j].offset.y), rect.size.x, p_base_color, p_outline_size, p_outline_color, p_font_shadow_color, p_shadow_as_outline, p_shadow_ofs);
 							}
 							idx++;
 						}
@@ -910,9 +920,9 @@ void RichTextLabel::_draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_
 				if (visible) {
 					if (frid != RID()) {
 						if (p_shadow_as_outline) {
-							TS->font_draw_glyph_outline(frid, ci, glyphs[i].font_size, size, p_ofs + fx_offset + gloff + Vector2(-shadow_ofs.x, shadow_ofs.y), gl, p_font_color_shadow);
-							TS->font_draw_glyph_outline(frid, ci, glyphs[i].font_size, size, p_ofs + fx_offset + gloff + Vector2(shadow_ofs.x, -shadow_ofs.y), gl, p_font_color_shadow);
-							TS->font_draw_glyph_outline(frid, ci, glyphs[i].font_size, size, p_ofs + fx_offset + gloff + Vector2(-shadow_ofs.x, -shadow_ofs.y), gl, p_font_color_shadow);
+							TS->font_draw_glyph_outline(frid, ci, glyphs[i].font_size, size, p_ofs + fx_offset + gloff + Vector2(-shadow_ofs.x, shadow_ofs.y), gl, p_font_shadow_color);
+							TS->font_draw_glyph_outline(frid, ci, glyphs[i].font_size, size, p_ofs + fx_offset + gloff + Vector2(shadow_ofs.x, -shadow_ofs.y), gl, p_font_shadow_color);
+							TS->font_draw_glyph_outline(frid, ci, glyphs[i].font_size, size, p_ofs + fx_offset + gloff + Vector2(-shadow_ofs.x, -shadow_ofs.y), gl, p_font_shadow_color);
 						}
 						TS->font_draw_glyph_outline(frid, ci, glyphs[i].font_size, size, p_ofs + fx_offset + gloff, gl, font_color);
 					}
@@ -922,7 +932,7 @@ void RichTextLabel::_draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_
 		}
 
 		// Draw main text.
-		Color selection_fg = get_theme_color("font_color_selected");
+		Color selection_fg = get_theme_color("font_selected_color");
 		Color selection_bg = get_theme_color("selection_color");
 
 		int sel_start = -1;
@@ -1068,6 +1078,8 @@ void RichTextLabel::_draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_
 		}
 		off.y += TS->shaped_text_get_descent(rid);
 	}
+
+	return line_count;
 }
 
 void RichTextLabel::_find_click(ItemFrame *p_frame, const Point2i &p_click, ItemFrame **r_click_frame, int *r_click_line, Item **r_click_item, int *r_click_char, bool *r_outside) {
@@ -1388,17 +1400,18 @@ void RichTextLabel::_notification(int p_what) {
 			Color base_color = get_theme_color("default_color");
 			Color outline_color = get_theme_color("outline_color");
 			int outline_size = get_theme_constant("outline_size");
-			Color font_color_shadow = get_theme_color("font_color_shadow");
+			Color font_shadow_color = get_theme_color("font_shadow_color");
 			bool use_outline = get_theme_constant("shadow_as_outline");
 			Point2 shadow_ofs(get_theme_constant("shadow_offset_x"), get_theme_constant("shadow_offset_y"));
 
+			visible_paragraph_count = 0;
 			visible_line_count = 0;
 
 			// New cache draw.
 			Point2 ofs = text_rect.get_position() + Vector2(0, main->lines[from_line].offset.y - vofs);
 			while (ofs.y < size.height && from_line < main->lines.size()) {
-				visible_line_count++;
-				_draw_line(main, from_line, ofs, text_rect.size.x, base_color, outline_size, outline_color, font_color_shadow, use_outline, shadow_ofs);
+				visible_paragraph_count++;
+				visible_line_count += _draw_line(main, from_line, ofs, text_rect.size.x, base_color, outline_size, outline_color, font_shadow_color, use_outline, shadow_ofs);
 				ofs.y += main->lines[from_line].text_buf->get_size().y;
 				from_line++;
 			}
@@ -1998,46 +2011,6 @@ void RichTextLabel::_fetch_item_fx_stack(Item *p_item, Vector<ItemFX *> &r_stack
 		}
 
 		item = item->parent;
-	}
-}
-
-Color RichTextLabel::_get_color_from_string(const String &p_color_str, const Color &p_default_color) {
-	if (p_color_str.begins_with("#")) {
-		return Color::html(p_color_str);
-	} else if (p_color_str == "aqua") {
-		return Color(0, 1, 1);
-	} else if (p_color_str == "black") {
-		return Color(0, 0, 0);
-	} else if (p_color_str == "blue") {
-		return Color(0, 0, 1);
-	} else if (p_color_str == "fuchsia") {
-		return Color(1, 0, 1);
-	} else if (p_color_str == "gray" || p_color_str == "grey") {
-		return Color(0.5, 0.5, 0.5);
-	} else if (p_color_str == "green") {
-		return Color(0, 0.5, 0);
-	} else if (p_color_str == "lime") {
-		return Color(0, 1, 0);
-	} else if (p_color_str == "maroon") {
-		return Color(0.5, 0, 0);
-	} else if (p_color_str == "navy") {
-		return Color(0, 0, 0.5);
-	} else if (p_color_str == "olive") {
-		return Color(0.5, 0.5, 0);
-	} else if (p_color_str == "purple") {
-		return Color(0.5, 0, 0.5);
-	} else if (p_color_str == "red") {
-		return Color(1, 0, 0);
-	} else if (p_color_str == "silver") {
-		return Color(0.75, 0.75, 0.75);
-	} else if (p_color_str == "teal") {
-		return Color(0, 0.5, 0.5);
-	} else if (p_color_str == "white") {
-		return Color(1, 1, 1);
-	} else if (p_color_str == "yellow") {
-		return Color(1, 1, 0);
-	} else {
-		return p_default_color;
 	}
 }
 
@@ -2905,17 +2878,18 @@ Error RichTextLabel::append_bbcode(const String &p_bbcode) {
 				}
 			}
 			push_cell();
+			const Color fallback_color = Color(0, 0, 0, 0);
 			for (int i = 0; i < subtag.size(); i++) {
 				Vector<String> subtag_a = subtag[i].split("=");
 				if (subtag_a.size() == 2) {
 					if (subtag_a[0] == "border") {
-						Color color = _get_color_from_string(subtag_a[1], Color(0, 0, 0, 0));
+						Color color = Color::from_string(subtag_a[1], fallback_color);
 						set_cell_border_color(color);
 					} else if (subtag_a[0] == "bg") {
 						Vector<String> subtag_b = subtag_a[1].split(",");
 						if (subtag_b.size() == 2) {
-							Color color1 = _get_color_from_string(subtag_b[0], Color(0, 0, 0, 0));
-							Color color2 = _get_color_from_string(subtag_b[1], Color(0, 0, 0, 0));
+							Color color1 = Color::from_string(subtag_b[0], fallback_color);
+							Color color2 = Color::from_string(subtag_b[1], fallback_color);
 							set_cell_row_background_color(color1, color2);
 						}
 					}
@@ -3131,9 +3105,9 @@ Error RichTextLabel::append_bbcode(const String &p_bbcode) {
 					} else if (subtag_a[0] == "outline_size") {
 						outline_size = subtag_a[1].to_int();
 					} else if (subtag_a[0] == "color") {
-						color = _get_color_from_string(subtag_a[1], color);
+						color = Color::from_string(subtag_a[1], color);
 					} else if (subtag_a[0] == "outline_color") {
-						outline_color = _get_color_from_string(subtag_a[1], outline_color);
+						outline_color = Color::from_string(subtag_a[1], outline_color);
 					}
 				}
 			}
@@ -3173,7 +3147,7 @@ Error RichTextLabel::append_bbcode(const String &p_bbcode) {
 				Color color = Color(1.0, 1.0, 1.0);
 				OptionMap::Element *color_option = bbcode_options.find("color");
 				if (color_option) {
-					color = _get_color_from_string(color_option->value(), color);
+					color = Color::from_string(color_option->value(), color);
 				}
 
 				int width = 0;
@@ -3205,14 +3179,14 @@ Error RichTextLabel::append_bbcode(const String &p_bbcode) {
 			tag_stack.push_front(bbcode_name);
 		} else if (tag.begins_with("color=")) {
 			String color_str = tag.substr(6, tag.length());
-			Color color = _get_color_from_string(color_str, base_color);
+			Color color = Color::from_string(color_str, base_color);
 			push_color(color);
 			pos = brk_end + 1;
 			tag_stack.push_front("color");
 
 		} else if (tag.begins_with("outline_color=")) {
 			String color_str = tag.substr(14, tag.length());
-			Color color = _get_color_from_string(color_str, base_color);
+			Color color = Color::from_string(color_str, base_color);
 			push_outline_color(color);
 			pos = brk_end + 1;
 			tag_stack.push_front("outline_color");
@@ -3406,14 +3380,46 @@ Error RichTextLabel::append_bbcode(const String &p_bbcode) {
 	return OK;
 }
 
-void RichTextLabel::scroll_to_line(int p_line) {
-	ERR_FAIL_INDEX(p_line, main->lines.size());
+void RichTextLabel::scroll_to_paragraph(int p_paragraph) {
+	ERR_FAIL_INDEX(p_paragraph, main->lines.size());
 	_validate_line_caches(main);
-	vscroll->set_value(main->lines[p_line].offset.y);
+	vscroll->set_value(main->lines[p_paragraph].offset.y);
+}
+
+int RichTextLabel::get_paragraph_count() const {
+	return current_frame->lines.size();
+}
+
+int RichTextLabel::get_visible_paragraph_count() const {
+	if (!is_visible()) {
+		return 0;
+	}
+	return visible_paragraph_count;
+}
+
+void RichTextLabel::scroll_to_line(int p_line) {
+	_validate_line_caches(main);
+
+	int line_count = 0;
+	for (int i = 0; i < main->lines.size(); i++) {
+		if ((line_count <= p_line) && (line_count + main->lines[i].text_buf->get_line_count() >= p_line)) {
+			float line_offset = 0.f;
+			for (int j = 0; j < p_line - line_count; j++) {
+				line_offset += main->lines[i].text_buf->get_line_size(j).y;
+			}
+			vscroll->set_value(main->lines[i].offset.y + line_offset);
+			return;
+		}
+		line_count += main->lines[i].text_buf->get_line_count();
+	}
 }
 
 int RichTextLabel::get_line_count() const {
-	return current_frame->lines.size();
+	int line_count = 0;
+	for (int i = 0; i < main->lines.size(); i++) {
+		line_count += main->lines[i].text_buf->get_line_count();
+	}
+	return line_count;
 }
 
 int RichTextLabel::get_visible_line_count() const {
@@ -3716,6 +3722,7 @@ void RichTextLabel::set_percent_visible(float p_percent) {
 		}
 		main->first_invalid_line = 0; //invalidate ALL
 		_validate_line_caches(main);
+		_change_notify("visible_characters");
 		update();
 	}
 }
@@ -3821,6 +3828,7 @@ void RichTextLabel::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_v_scroll"), &RichTextLabel::get_v_scroll);
 
 	ClassDB::bind_method(D_METHOD("scroll_to_line", "line"), &RichTextLabel::scroll_to_line);
+	ClassDB::bind_method(D_METHOD("scroll_to_paragraph", "paragraph"), &RichTextLabel::scroll_to_paragraph);
 
 	ClassDB::bind_method(D_METHOD("set_tab_size", "spaces"), &RichTextLabel::set_tab_size);
 	ClassDB::bind_method(D_METHOD("get_tab_size"), &RichTextLabel::get_tab_size);
@@ -3850,6 +3858,9 @@ void RichTextLabel::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_line_count"), &RichTextLabel::get_line_count);
 	ClassDB::bind_method(D_METHOD("get_visible_line_count"), &RichTextLabel::get_visible_line_count);
+
+	ClassDB::bind_method(D_METHOD("get_paragraph_count"), &RichTextLabel::get_paragraph_count);
+	ClassDB::bind_method(D_METHOD("get_visible_paragraph_count"), &RichTextLabel::get_visible_paragraph_count);
 
 	ClassDB::bind_method(D_METHOD("get_content_height"), &RichTextLabel::get_content_height);
 
@@ -3929,6 +3940,15 @@ void RichTextLabel::_bind_methods() {
 
 void RichTextLabel::set_visible_characters(int p_visible) {
 	visible_characters = p_visible;
+	if (p_visible == -1) {
+		percent_visible = 1;
+	} else {
+		int total_char_count = get_total_character_count();
+		if (total_char_count > 0) {
+			percent_visible = (float)p_visible / (float)total_char_count;
+		}
+	}
+	_change_notify("percent_visible");
 	update();
 }
 
